@@ -6,7 +6,7 @@
 
 Environment created for the students of the Reinforcement Learning course (CISC 474) of Winter 2025 at Queen's 
 University, taught by Prof. Sidney Givigi. As their course project, students must train an agent in the environment, 
-modifying the observation space and doing reward shaping to achieve the best results possible.
+modifying the observation space and doing reward shaping to achieve a robust agent that covers diverse maps quickly.
 
 ## Installation
 

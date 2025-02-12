@@ -96,8 +96,8 @@ The action is discrete in the range `{0, 4}`.
 
 ### Observation Space
 
-The Observation Space must be implemented on the `custom.py` file. An example is already given, but we **HIGHLY** recommend 
-that a simpler observation be used instead.
+The Observation Space must be implemented on the `custom.py` file. An example is already given, but we **HIGHLY** 
+recommend that a simpler observation be used instead.
 
 ### Starting State
 The episode starts with the agent at the top-left tile `(0, 0)`, with that tile already explored.

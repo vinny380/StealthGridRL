@@ -12,7 +12,7 @@ def observation_space(env: gym.Env) -> gym.spaces.Space:
     """
     # The grid has (10, 10, 3) shape and can store values from 0 to 255 (uint8). To use the whole grid as the
     # observation space, we can consider a MultiDiscrete space with values in the range [0, 256).
-    cell_values = env.grid.sum(axis=2) + 7
+    cell_values = env.grid + 256
 
     # if MultiDiscrete is used, it's important to flatten() numpy arrays!
     return gym.spaces.MultiDiscrete(cell_values.flatten())
@@ -24,13 +24,8 @@ def observation(grid: np.ndarray):
     """
     # If the observation returned is not the same shape as the observation_space, an error will occur!
     # Make sure to make changes to both functions accordingly.
-    summed = grid.sum(axis=2)
-    vals = [0, 765, 201, 482, 229, 255, 509]
-    for i in range(10):
-        for j in range(10):
-            summed[i, j] = vals.index(summed[i, j])
 
-    return summed.flatten()
+    return grid.flatten()
 
 
 def reward(info: dict) -> float:

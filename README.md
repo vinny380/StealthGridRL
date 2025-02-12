@@ -4,23 +4,29 @@
 
 ## Overview
 
-The goal of the Agent (Grey circle) is to explore all available cells within the map as quickly as possible without 
-being seen by enemies. 
-
-Black cells have not yet been explored and White cells already have. While moving, the Agent should not move towards 
-a Wall (Brown) or an Enemy (Green), otherwise it will get stunned (Yellow) and be unable to move for 1 round (step).
-
-Also, the Enemies are on the lookout for the agent, constantly surveilling their surrounding area (Red/Light Red). 
-All Enemies have a fixed range that they can observe, and they keep rotating counter-clockwise at every step. If the
-Agent is seen by an Enemy, the mission fails.
+Environment created for the students of the Reinforcement Learning course (CISC 474) of Winter 2025 at Queen's 
+University, taught by Prof. Sidney Givigi. As their course project, students must train an agent in the environment, 
+modifying the observation space and doing reward shaping to achieve the best results possible.
 
 ## Installation
 
-To install the environment, simply run 
+To install the environment, simply run: 
 
 ```bash
 pip install -e coverage-gridworld
 ```
+
+## Rules
+
+The goal of the Agent (Grey circle) is to explore all available cells within the map as quickly as possible without 
+being seen by enemies. 
+
+Black cells have not yet been explored and White cells already have. While moving, the Agent should navigate through 
+Walls (Brown) and Enemies (Green).
+
+Also, the Enemies are on the lookout for the agent, constantly surveilling their surrounding area (Red/Light Red). 
+All Enemies have a fixed range that they can observe, and they keep rotating counter-clockwise at every step. If the
+Agent is seen by an Enemy, the mission fails.
 
 ## Map modes
 
@@ -29,9 +35,11 @@ There are three ways of defining the map layouts to be used:
 ### Standard maps
 
 Three standard maps are included in the `\coverage_gridworld\__init.py__` file: 
-- `maze`: easy difficulty map, 2 enemies and focuses mostly on movement,
-- `chokepoint`: medium difficulty map, 4 enemies and requires precise movement and timing,
-- `sneaky_enemies`: hard difficulty map, 5 enemies and many walls, with some cells being surveilled by multiple 
+- `just_go`: very easy difficulty map, 0 enemies and barely any walls, a simple validation test for algorithms,
+- `safe`: easy difficulty map, 0 enemies and many walls,
+- `maze`: medium difficulty map, 2 enemies and focuses mostly on movement,
+- `chokepoint`: hard difficulty map, 4 enemies and requires precise movement and timing,
+- `sneaky_enemies`: very hard difficulty map, 5 enemies and many walls, with some cells being surveilled by multiple 
 enemies.
 
 The standard maps can be used by using their tag on `gymnasium.make()`. For example:
@@ -88,36 +96,19 @@ The action is discrete in the range `{0, 4}`.
 
 ### Observation Space
 
-The observation is an `N * N * 3` `uint8` array, where `N` is the grid dimension (standard value `10`) and `3` 
-corresponds to the RGB channels. Each RGB channel has a range of `0` to `255` (inclusive), making the observation space
-MultiDiscrete.
+The Observation Space must be implemented on the `custom.py` file. An example is already given, but we **HIGHLY** recommend 
+that a simpler observation be used instead.
 
 ### Starting State
 The episode starts with the agent at the top-left tile `(0, 0)`, with that tile already explored.
 
 ### Transition
-The transitions are deterministic. If the agent moves towards a wall or enemy cell, it will be stunned for the next
-step, and whatever action while stunned will have no effect.
+The transitions are deterministic. 
 
 ### Rewards
-The standard reward returned by the environment is the score from the game. Score is calculated by the following 
-equation: 
-
-``SCORE = num_tiles_covered * 5 + is_alive * time_remaining`` 
-
-(`is_alive` is a boolean that assumes value `0` if the player died at the end of the episode or `1` if it was alive)
-        
-However, novel reward schemes may be implemented on the agent side, penalizing or rewarding certain behaviors (e.g. 
-hitting a wall, not moving, walking over an explored cell, etc.). The `info` dictionary returned by the step method may 
-be used for that and contains the following keys:
-
-- `enemies` : `list` of `Enemy` objects,
-- `agent_pos` : agent position as an `int`, considering the flattened grid (e.g. cell `(2, 3)` corresponds to 
-position `23`),
-- `covered_cells` : `int`, how many cells have been covered by the agent so far,
-- `coverable_cells` : `int`, how many cells can be covered in the current map layout,
-- `steps_remaining` : steps remaining in the episode,
-- `is_stuned` : `boolean` value determining whether the agent is stunned or not.
+The reward scheme must be implemented on the `custom.py` file, penalizing or rewarding certain
+behaviors (e.g. hitting a wall, not moving, walking over an explored cell, etc.). The `info` dictionary returned
+by the step method may be used for that.
 
 ### Episode End
 

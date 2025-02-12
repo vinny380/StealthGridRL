@@ -5,6 +5,8 @@ import coverage_gridworld  # must be imported, even though it's not directly ref
 
 
 def human_player():
+    # Write the letter for the desired movement in the terminal/console and then press Enter
+
     input_action = input()
     if input_action.lower() == "w":
         return 3
@@ -23,7 +25,32 @@ def human_player():
 def random_player():
     return random.randint(0, 4)
 
+
 maps = [
+    [
+        [3, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    ],
+    [
+        [3, 0, 0, 2, 0, 2, 0, 0, 0, 0],
+        [0, 2, 0, 0, 0, 2, 0, 0, 2, 0],
+        [0, 2, 0, 2, 2, 2, 2, 2, 2, 0],
+        [0, 2, 0, 0, 0, 2, 0, 0, 0, 0],
+        [0, 2, 0, 2, 0, 2, 0, 0, 2, 0],
+        [0, 2, 0, 0, 0, 0, 0, 2, 0, 0],
+        [0, 2, 2, 2, 0, 0, 0, 2, 0, 0],
+        [0, 0, 0, 0, 0, 2, 0, 0, 2, 0],
+        [0, 2, 0, 2, 0, 2, 2, 0, 0, 0],
+        [0, 0, 0, 0, 0, 2, 0, 0, 0, 0]
+    ],
     [
         [3, 2, 0, 0, 0, 0, 2, 0, 0, 0],
         [0, 2, 0, 2, 2, 0, 2, 0, 2, 2],
@@ -74,6 +101,4 @@ for i in range(num_episodes):
 
         # Sleep may be used to allow each step to be visualized. Value can be changed
         #time.sleep(0.2)
-        if done:
-            time.sleep(2)
 env.close()

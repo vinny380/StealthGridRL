@@ -5,6 +5,7 @@ import numpy as np
 import gymnasium as gym
 from gymnasium.error import DependencyNotInstalled
 from typing import Optional
+from coverage_gridworld.custom import observation_space, observation, reward
 
 # action IDs (and for one-directional states)
 LEFT = 0
@@ -21,7 +22,6 @@ GREY = (160, 161, 161)       # agent
 GREEN = (31, 198, 0)         # enemy
 RED = (255, 0, 0)            # unexplored cell being observed by an enemy
 LIGHT_RED = (255, 127, 127)  # explored cell being observed by an enemy
-YELLOW = (255, 255, 0)       # stunned agent
 
 # color IDs
 COLOR_IDS = {
@@ -32,7 +32,6 @@ COLOR_IDS = {
     4: GREEN,      # enemy
     5: RED,        # unexplored cell being observed by an enemy
     6: LIGHT_RED,  # explored cell being observed by an enemy
-    7: YELLOW      # stunned agent
 }
 
 
@@ -99,19 +98,18 @@ class CoverageGridworld(gym.Env):
     - 3: Move up
     - 4: Stay (do not move)
 
+    ## Observation Space
+    The Observation Space must be implemented on the custom.py file. An example is already given, but we HIGHLY
+    recommend that a simpler observation be used instead.
+
     ## Starting State
     The episode starts with the agent at the top-left tile, with that tile already explored.
 
     ## Transition
-    The transitions are deterministic. If the agent moves towards a wall or enemy cell, it will be stunned for the next
-    step, and whatever action while stunned will have no effect.
+    The transitions are deterministic.
 
     ## Rewards
-    - The standard reward returned by the environment is the score from the game. Score is calculated by the following
-    equation:
-        SCORE = num_tiles_covered * 5 + is_alive * time_remaining
-        -- is_alive is a boolean that assumes value 0 if the player died at the end of the episode or 1 if it was alive
-    - However, novel reward schemes may be implemented on the agent side, penalizing or rewarding certain
+    The reward scheme must be implemented on the custom.py file, penalizing or rewarding certain
     behaviors (e.g. hitting a wall, not moving, walking over an explored cell, etc.). The "info" dictionary returned
     by the step method may be used for that.
 
@@ -128,7 +126,6 @@ class CoverageGridworld(gym.Env):
     - White: explored tiles
     - Brown: walls
     - Grey: agent
-    - Yellow: stunned agent
     - Green: enemy
     - Red: unexplored tiles currently under enemy surveillance
     - Light red: explored tiles currently under enemy surveillance
@@ -137,7 +134,7 @@ class CoverageGridworld(gym.Env):
 
     metadata = {
         "render_modes": ["human"],
-        "render_fps": 30,
+        "render_fps": 10,
         "grid_size": 10
     }
 
@@ -149,7 +146,7 @@ class CoverageGridworld(gym.Env):
             num_walls: Optional[int] = 12,
             predefined_map: Optional[np.ndarray] = None,
             predefined_map_list: Optional[list] = None,
-            activate_game_status: Optional[bool] = True,
+            activate_game_status: Optional[bool] = False,
             **kwargs
     ):
         # Grid attributes
@@ -159,8 +156,7 @@ class CoverageGridworld(gym.Env):
         self.grid = np.zeros((self.grid_size, self.grid_size, 3), dtype=np.uint8)
 
         # Gymnasium spaces
-        __cell_values = self.grid + 256  # uint8 goes from 0 to 255, so observation space is [0, 256)
-        self.observation_space = gym.spaces.MultiDiscrete(__cell_values)
+        self.observation_space = observation_space(self)
         self.action_space = gym.spaces.Discrete(5)
 
         # Rendering attributes for Pygame
@@ -176,17 +172,20 @@ class CoverageGridworld(gym.Env):
             self.window_size[1] // self.grid_size,
         )
 
-        # State attributes
-        self.agent_pos = 0   # agent position, considering the flattened grid (e.g. cell 2,3 is position 23)
-        self.covered_cells = 1   # how many cells have been covered by the agent so far
-        self.coverable_cells = 0   # how many cells can be covered in the current map layout
-        self.steps_remaining = 250   # steps remaining in the episode
-        self.is_stuned = False   # if the agent is stunned or not
+        # Map layout attributes
         self.num_enemies = num_enemies   # number of enemies used
-        self.enemy_list = []   # list of enemies. Populated by __create_enemy_from_map() or __spawn_enemy_fov()
         self.enemy_fov_distance = enemy_fov_distance   # number of cells that the enemy can observe
         self.num_walls = num_walls   # number of walls in the map
-        self.terminated = False   # if the episode has ended or not
+
+        # State attributes
+        self.agent_pos = 0   # agent position, considering the flattened grid (e.g. cell 2,3 is position 23)
+        self.total_covered_cells = 1   # how many cells have been covered by the agent so far
+        self.coverable_cells = 0   # how many cells can be covered in the current map layout
+        self.steps_remaining = 500   # steps remaining in the episode
+        self.enemy_list = []   # list of enemies. Populated by __create_enemy_from_map() or __spawn_enemy_fov()
+        self.game_over = False   # if the episode has ended or not
+
+        # Environment variables
         self.predefined_map = predefined_map   # map layout definition as a list of color ids, optional
         self.activate_game_status = activate_game_status   # if game status messages should be shown or not
         self.predefined_map_list = predefined_map_list   # list of predefined maps to be used, optional
@@ -212,7 +211,7 @@ class CoverageGridworld(gym.Env):
         """
         Wrapper method to return the grid
         """
-        return self.grid
+        return observation(self.grid)
 
     def __validate_map_list_shapes(self):
         """
@@ -235,11 +234,10 @@ class CoverageGridworld(gym.Env):
 
         # Clears state variables
         self.agent_pos = 0
-        self.covered_cells = 1
-        self.steps_remaining = 250
-        self.is_stuned = False
+        self.total_covered_cells = 1
+        self.steps_remaining = 500
         self.enemy_list = []
-        self.terminated = False
+        self.game_over = False
 
         # Repopulates grid
         self.__populate_grid()
@@ -379,8 +377,7 @@ class CoverageGridworld(gym.Env):
                 enemy.add_fov_cell((fov_row, fov_col))
                 if fov_row * self.grid_size + fov_col == self.agent_pos:
                     # if FOV cell is the agent's cell, then that creates a game over condition
-                    self.terminated = True
-                    self.__print_game_status("GAME OVER!")
+                    self.game_over = True
                 if self._is_color_in_cell(WHITE, fov_row, fov_col) or self._is_color_in_cell(GREY, fov_row, fov_col):
                     # if the cell was either WHITE or GREY, then it becomes LIGHT_RED
                     self.grid[fov_row, fov_col] = np.asarray(LIGHT_RED)
@@ -447,73 +444,76 @@ class CoverageGridworld(gym.Env):
         """
         Required Gymansium method, performs a step within the environment given the action provided
         """
-        # if agent is stunned or used STAY action, doesn't move
-        if self.is_stuned or action == 4:
-            self.is_stuned = False
-        else:
-            self.__move(action)
+        terminated = False
+
+        if self.steps_remaining <= 0:
+            return None, 0, True, False, {}
+
+        # if action is STAY, doesn't move
+        new_cell_covered = False
+        if action != 4:
+            new_cell_covered = self.__move(action)
 
         # rotates enemies after agent's movement
         self.__rotate_enemies()
 
-        # decrements steps and checks for termination
         self.steps_remaining -= 1
-        if self.steps_remaining <= 0:
-            self.__print_game_status("TIME IS OVER!")
-            self.terminated = True
-        if self.coverable_cells == self.covered_cells:
-            self.__print_game_status("VICTORY!")
-            self.terminated = True
 
-        # calculates current score
-        score = self.covered_cells * 5
-        if not self.terminated:
-            score += self.steps_remaining
-        else:
-            self.__print_game_status(f"Final score: {score}")
+        if self.coverable_cells == self.total_covered_cells:
+            self.__print_game_status("VICTORY!")
+            terminated = True
+        elif self.steps_remaining <= 0:
+            self.__print_game_status("TIME IS OVER!")
+            terminated = True
+        elif self.game_over:
+            self.__print_game_status("GAME OVER!")
+            terminated = True
 
         # creates info dictionary with extra state information
         info = {
             "enemies": self.enemy_list,
             "agent_pos": self.agent_pos,
-            "covered_cells": self.covered_cells,
+            "total_covered_cells": self.total_covered_cells,
+            "cells_remaining": self.coverable_cells - self.total_covered_cells,
             "coverable_cells": self.coverable_cells,
             "steps_remaining": self.steps_remaining,
-            "is_stuned": self.is_stuned
+            "new_cell_covered": new_cell_covered,
+            "game_over": self.game_over
         }
 
         # renders the environment if needed
         if self.render_mode is not None and self.render_mode == "human":
             self.render()
 
-        return self.get_state(), score, self.terminated, False, info
+        return self.get_state(), reward(info), terminated, False, info
 
     def __move(self, action: int):
         """
-        Moves the agent within the grid based on the action provided
+        Moves the agent within the grid based on the action provided. Returns True if a new cell is covered
         """
         movement = [(0, -1), (1, 0), (0, 1), (-1, 0)]
         agent_x = self.agent_pos % self.grid_size
         agent_y = self.agent_pos // self.grid_size
         y = agent_y + movement[action][0]
         x = agent_x + movement[action][1]
+        new_cell_covered = False
 
         if 0 <= x < self.grid_size and 0 <= y < self.grid_size:
             if self._is_color_in_cell(BROWN, y, x) or self._is_color_in_cell(GREEN, y, x):
-                # if agent moves towards a wall or enemy, it gets stunned
-                self.is_stuned = True
+                # if agent moves towards a wall or enemy, nothing happens
+                pass
             else:
                 self.agent_pos = y * self.grid_size + x
                 # previous agent's cell becomes WHITE instead of GREY
                 self.grid[agent_y, agent_x] = np.asarray(WHITE)
                 # enemy rotation happens after agent movement, so RED is also accounted for
                 if self._is_color_in_cell(BLACK, y, x) or self._is_color_in_cell(RED, y, x):
-                    self.covered_cells += 1
+                    self.total_covered_cells += 1
+                    new_cell_covered = True
                 # new agent's cell becomes GREY
                 self.grid[y, x] = np.asarray(GREY)
-        else:
-            # if agent is moving outside the boundaries of the map, it gets stunned
-            self.is_stuned = True
+
+        return new_cell_covered
 
     def __rotate_enemies(self):
         """
@@ -566,10 +566,9 @@ class CoverageGridworld(gym.Env):
 
         if self.window_surface is None:
             pygame.init()
-            if self.render_mode == "human":
-                pygame.display.init()
-                pygame.display.set_caption(self.unwrapped.spec.id)
-                self.window_surface = pygame.display.set_mode(self.window_size)
+            pygame.display.init()
+            pygame.display.set_caption(self.unwrapped.spec.id)
+            self.window_surface = pygame.display.set_mode(self.window_size)
 
         assert (
                 self.window_surface is not None
@@ -599,10 +598,7 @@ class CoverageGridworld(gym.Env):
                     else:  # if an enemy is observing the agent's cell
                         pygame.draw.rect(self.window_surface, self.grid[y, x], rect)
 
-                    if self.is_stuned:
-                        agent_color = YELLOW
-                    else:
-                        agent_color = GREY
+                    agent_color = GREY
                     pygame.draw.ellipse(self.window_surface, agent_color, rect)
                 else:  # draw other cells
                     pygame.draw.rect(self.window_surface, self.grid[y, x], rect)

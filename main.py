@@ -89,7 +89,7 @@ maps = [
     ]
 ]
 
-env = gymnasium.make("sneaky_enemies", render_mode="human", predefined_map_list=None)
+env = gymnasium.make("sneaky_enemies", render_mode="human", predefined_map_list=None, activate_game_status=True)
 num_episodes = 5
 
 for i in range(num_episodes):
@@ -101,4 +101,6 @@ for i in range(num_episodes):
 
         # Sleep may be used to allow each step to be visualized. Value can be changed
         #time.sleep(0.2)
+    if done:
+        time.sleep(2)
 env.close()

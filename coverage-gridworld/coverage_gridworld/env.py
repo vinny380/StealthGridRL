@@ -7,7 +7,7 @@ from gymnasium.error import DependencyNotInstalled
 from typing import Optional
 from coverage_gridworld.custom import observation_space, observation, reward
 
-# action IDs (and for one-directional states)
+# action IDs
 LEFT = 0
 DOWN = 1
 RIGHT = 2

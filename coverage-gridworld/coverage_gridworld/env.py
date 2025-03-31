@@ -7,6 +7,11 @@ from gymnasium.error import DependencyNotInstalled
 from typing import Optional
 from coverage_gridworld.custom import observation_space, observation, reward
 
+"""
+THIS FILE SHOULD NOT BE MODIFIED! USE IT ONLY FOR UNDERSTANDING HOW THE ENVIRONMENT WORKS.
+"""
+
+
 # action IDs
 LEFT = 0
 DOWN = 1

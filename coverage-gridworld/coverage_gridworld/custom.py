@@ -12,7 +12,7 @@ def observation_space(env: gym.Env) -> gym.spaces.Space:
     """
     # The grid has (10, 10, 3) shape and can store values from 0 to 255 (uint8). To use the whole grid as the
     # observation space, we can consider a MultiDiscrete space with values in the range [0, 256).
-    cell_values = env.grid + 256
+    cell_values = env.grid + 255
 
     # if MultiDiscrete is used, it's important to flatten() numpy arrays!
     return gym.spaces.MultiDiscrete(cell_values.flatten())

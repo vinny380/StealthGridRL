@@ -96,7 +96,7 @@ for i in range(num_episodes):
     env.reset()
     done = False
     while not done:
-        action = human_player()
+        action = random_player()
         obs, reward, done, truncated, info = env.step(action)
 
         # Sleep may be used to allow each step to be visualized. Value can be changed

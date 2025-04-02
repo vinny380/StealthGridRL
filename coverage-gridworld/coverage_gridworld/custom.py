@@ -12,8 +12,7 @@ def observation_space(env: gym.Env) -> gym.spaces.Space:
     """
     # The grid has (10, 10, 3) shape and can store values from 0 to 255 (uint8). To use the whole grid as the
     # observation space, we can consider a MultiDiscrete space with values in the range [0, 256).
-    cell_values = env.grid + 255
-
+    cell_values = env.grid + 256
     # if MultiDiscrete is used, it's important to flatten() numpy arrays!
     return gym.spaces.MultiDiscrete(cell_values.flatten())
 
@@ -24,7 +23,6 @@ def observation(grid: np.ndarray):
     """
     # If the observation returned is not the same shape as the observation_space, an error will occur!
     # Make sure to make changes to both functions accordingly.
-
     return grid.flatten()
 
 
@@ -57,5 +55,7 @@ def reward(info: dict) -> float:
 
     # IMPORTANT: You may design a reward function that uses just some of these values. Experiment with different
     # rewards and find out what works best for the algorithm you chose given the observation space you are using
+
+
 
     return 0

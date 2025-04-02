@@ -134,8 +134,13 @@ env = gym.make("sneaky_enemies", render_mode="human", predefined_map_list=None, 
 
 num_episodes = 1
 
+model = DQN("MlpPolicy", env, verbose=2)
+model.learn(total_timesteps=1000)
+model.save("dqn")
+
 for i in range(num_episodes):
     env.reset()
+    obs = env.get_state()
     done = False
     # Do nothing for one step, just to get danger table values
     obs, reward, done, truncated, info = env.step(4)

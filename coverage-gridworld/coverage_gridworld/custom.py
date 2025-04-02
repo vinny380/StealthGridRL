@@ -55,7 +55,7 @@ def reward(info: dict) -> float:
 
     # IMPORTANT: You may design a reward function that uses just some of these values. Experiment with different
     # rewards and find out what works best for the algorithm you chose given the observation space you are using
-
-
-
-    return 0
+    reward = 0
+    reward += 10 if new_cell_covered else -0.1
+    reward -= 1000 if game_over else 0
+    return reward

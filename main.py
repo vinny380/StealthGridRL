@@ -4,6 +4,8 @@ import sys
 import time
 import gymnasium as gym
 
+from stable_baselines3 import DQN
+
 # Add coverage-gridworld to path
 sys.path.append("./coverage-gridworld")
 print(sys.path)
@@ -134,7 +136,7 @@ env = gym.make("sneaky_enemies", render_mode="human", predefined_map_list=None, 
 
 num_episodes = 1
 
-model = DQN("MlpPolicy", env, verbose=2)
+model = DQN("MlpPolicy", env, verbose=0)
 model.learn(total_timesteps=1000)
 model.save("dqn")
 

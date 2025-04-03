@@ -5,6 +5,26 @@ import gymnasium as gym
 Feel free to modify the functions below and experiment with different environment configurations.
 """
 
+# From env.py because I couldn't figure out how to actually import them.
+# rendering colors
+BLACK = (0, 0, 0)            # unexplored cell
+WHITE = (255, 255, 255)      # explored cell
+BROWN = (101, 67, 33)        # wall
+GREY = (160, 161, 161)       # agent
+GREEN = (31, 198, 0)         # enemy
+RED = (255, 0, 0)            # unexplored cell being observed by an enemy
+LIGHT_RED = (255, 127, 127)  # explored cell being observed by an enemy
+
+# color IDs
+COLOR_IDS = {
+    0: BLACK,      # unexplored cell
+    1: WHITE,      # explored cell
+    2: BROWN,      # wall
+    3: GREY,       # agent
+    4: GREEN,      # enemy
+    5: RED,        # unexplored cell being observed by an enemy
+    6: LIGHT_RED,  # explored cell being observed by an enemy
+}
 
 def observation_space(env: gym.Env) -> gym.spaces.Space:
     """
@@ -12,7 +32,9 @@ def observation_space(env: gym.Env) -> gym.spaces.Space:
     """
     # The grid has (10, 10, 3) shape and can store values from 0 to 255 (uint8). To use the whole grid as the
     # observation space, we can consider a MultiDiscrete space with values in the range [0, 256).
-    cell_values = env.grid + 256
+
+    # Make a grid with the symbolic representation, rather than color.
+    cell_values = np.zeros(shape=(10, 10), dtype=np.uint8) + len(COLOR_IDS)
     # if MultiDiscrete is used, it's important to flatten() numpy arrays!
     return gym.spaces.MultiDiscrete(cell_values.flatten())
 
@@ -23,7 +45,13 @@ def observation(grid: np.ndarray):
     """
     # If the observation returned is not the same shape as the observation_space, an error will occur!
     # Make sure to make changes to both functions accordingly.
-    return grid.flatten()
+
+    cell_values = np.ndarray(shape=(10, 10), dtype=np.uint8)
+    for x in range(grid.shape[0]):
+        for y in range(grid.shape[1]):
+            symbol = tuple(grid[x][y])
+            cell_values[x][y] = list(COLOR_IDS.keys())[list(COLOR_IDS.values()).index(symbol)]
+    return cell_values.flatten()
 
 
 def reward(info: dict) -> float:

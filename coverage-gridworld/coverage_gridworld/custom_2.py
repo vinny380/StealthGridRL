@@ -34,8 +34,10 @@ def observation_space(env: gym.Env) -> gym.spaces.Space:
     # observation space, we can consider a MultiDiscrete space with values in the range [0, 256).
 
     # Make a grid with the symbolic representation, rather than color.
-    cell_values = np.zeros(shape=(10, 10), dtype=np.uint8) + 7
-
+    # In this case, we simplify such that the first layer encodes the agent, a covered cell, an uncovered cell, or an untraversable tile.
+    cell_values = np.zeros(shape=(10, 10), dtype=np.uint8) + 4
+    danger_values = np.zeros(shape=(10, 10), dtype=np.uint8) + 5
+    cell_values = np.stack((cell_values, danger_values), axis=-1)
     # if MultiDiscrete is used, it's important to flatten() numpy arrays!
     return gym.spaces.MultiDiscrete(cell_values.flatten())
 
@@ -49,12 +51,44 @@ def observation(grid: np.ndarray):
 
     cell_values = np.zeros(shape=(10, 10), dtype=np.uint8)
 
+
+    enemies = []
     for x in range(grid.shape[0]):
         for y in range(grid.shape[1]):
             symbol = tuple(grid[x][y])
             symbol_num = list(COLOR_IDS.keys())[list(COLOR_IDS.values()).index(symbol)]
-            cell_values[x][y] = symbol_num
+            match symbol_num:
+                case 0, 5:
+                    cell_values[x][y] = 0
+                case 1, 6:
+                    cell_values[x][y] = 1
+                case 2, 4:
+                    cell_values[x][y] = 2
+                case 3:
+                    cell_values[x][y] = 3
+            # Keep track of any cells containing enemies, for later.
+            if tuple(grid[x][y]) == GREEN:
+                enemies.append((x, y))
 
+    danger_values = np.zeros(shape=(10, 10), dtype=np.uint8)
+    for (ex, ey) in enemies:
+        for (x_, y_)in [(0, -1), (-1, 0), (0, 1), (1, 0)]:
+
+            for r in range(1, 5):
+                cx, cy = (ex + r*x_, ey + r*y_)
+                # Make sure the cell is in bounds
+                if cx not in range(10) or cy not in range(10):
+                    break
+                # Then, check if vision is obstructed
+                if tuple(grid[cx][cy]) == BROWN or tuple(grid[cx][cy]) == GREEN:
+                    break
+                # Otherwise, set a danger value for the current cell based on if it's being actively observed.
+                if tuple(grid[cx][cy]) == RED or tuple(grid[cx][cy]) == LIGHT_RED:
+                    danger_values[cx][cy] = max(danger_values[cx][cy], 0)
+                else:
+                    danger_values[cx][cy] += 1
+
+    cell_values = np.stack((cell_values, danger_values), axis=-1)
     return cell_values.flatten()
 
 

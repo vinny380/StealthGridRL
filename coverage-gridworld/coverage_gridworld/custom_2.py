@@ -50,7 +50,7 @@ def observation(grid: np.ndarray):
     # Make sure to make changes to both functions accordingly.
 
     cell_values = np.zeros(shape=(10, 10), dtype=np.uint8)
-
+    danger_values = np.zeros(shape=(10, 10), dtype=np.uint8)
 
     enemies = []
     for x in range(grid.shape[0]):
@@ -69,8 +69,11 @@ def observation(grid: np.ndarray):
             # Keep track of any cells containing enemies, for later.
             if tuple(grid[x][y]) == GREEN:
                 enemies.append((x, y))
+            # Doing this means we can reduce the danger factor by one;
+            # at least one enemy won't be viewing this cell next step.
+            if tuple(grid[x][y]) == RED or tuple(grid[x][y]) == LIGHT_RED:
+                danger_values[x][y] = 4
 
-    danger_values = np.zeros(shape=(10, 10), dtype=np.uint8)
     for (ex, ey) in enemies:
         for (x_, y_)in [(0, -1), (-1, 0), (0, 1), (1, 0)]:
 
@@ -83,10 +86,8 @@ def observation(grid: np.ndarray):
                 if tuple(grid[cx][cy]) == BROWN or tuple(grid[cx][cy]) == GREEN:
                     break
                 # Otherwise, set a danger value for the current cell based on if it's being actively observed.
-                if tuple(grid[cx][cy]) == RED or tuple(grid[cx][cy]) == LIGHT_RED:
-                    danger_values[cx][cy] = max(danger_values[cx][cy], 0)
-                else:
-                    danger_values[cx][cy] += 1
+                # By taking it mod 5, we can account for the value from earlier.
+                danger_values[cx][cy] = (danger_values[cx][cy] + 1) % 5
 
     cell_values = np.stack((cell_values, danger_values), axis=-1)
     return cell_values.flatten()

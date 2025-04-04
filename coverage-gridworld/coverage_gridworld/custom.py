@@ -1,34 +1,21 @@
 import numpy as np
 import gymnasium as gym
+from env import *
 
 """
 Feel free to modify the functions below and experiment with different environment configurations.
 """
 
-# From env.py because I couldn't figure out how to actually import them.
-# rendering colors
-BLACK = (0, 0, 0)            # unexplored cell
-WHITE = (255, 255, 255)      # explored cell
-BROWN = (101, 67, 33)        # wall
-GREY = (160, 161, 161)       # agent
-GREEN = (31, 198, 0)         # enemy
-RED = (255, 0, 0)            # unexplored cell being observed by an enemy
-LIGHT_RED = (255, 127, 127)  # explored cell being observed by an enemy
-
-# color IDs
-COLOR_IDS = {
-    0: BLACK,      # unexplored cell
-    1: WHITE,      # explored cell
-    2: BROWN,      # wall
-    3: GREY,       # agent
-    4: GREEN,      # enemy
-    5: RED,        # unexplored cell being observed by an enemy
-    6: LIGHT_RED,  # explored cell being observed by an enemy
-}
-
 # Store danger table here within custom.py
 danger_table = [[[0 for _ in range(4)] for _ in range(10)] for _ in range(10)]
 danger_table_set = False
+
+# Active reward function (1, 2, or 3)
+# 1 = Basic exploration reward
+# 2 = Predictive danger avoidance reward
+# 3 = Distance-based exploration reward
+ACTIVE_REWARD_FUNCTION = 1
+
 # New shit
 def determine_cell_danger_tables(enemies):
     # Take in location of enemies in particular
@@ -88,23 +75,115 @@ def observation(grid: np.ndarray):
     return cell_values.flatten()
 
 
-def reward(info: dict) -> float:
+def reward_function_1(info: dict) -> float:
     """
-    Function to calculate the reward for the current step based on the state information.
+    Basic Exploration Reward Function
+    
+    This reward function focuses on efficient exploration with simple penalties:
+    1. Rewards exploring new cells with a bonus relative to the difficulty (fewer cells = higher reward)
+    2. Small penalty for each step to encourage efficiency
+    3. Large penalty for being spotted by enemies
+    4. Bonus reward for completing the level
+    """
+    agent_pos = info["agent_pos"]
+    total_covered_cells = info["total_covered_cells"]
+    cells_remaining = info["cells_remaining"]
+    coverable_cells = info["coverable_cells"]
+    new_cell_covered = info["new_cell_covered"]
+    game_over = info["game_over"]
+    
+    reward = 0
+    
+    # Penalty for each step to encourage efficiency
+    reward -= 1
+    
+    # Reward for covering a new cell (higher reward for more difficult maps with fewer coverable cells)
+    if new_cell_covered:
+        reward += max(50, 200 - coverable_cells)
+    
+    # Large penalty for game over (being spotted)
+    if game_over:
+        reward -= 500
+    
+    # Bonus for completing the level
+    if cells_remaining == 0:
+        reward += 1000
+        
+    return reward
 
-    The info dictionary has the following keys:
-    - enemies (list): list of `Enemy` objects. Each Enemy has the following attributes:
-        - x (int): column index,
-        - y (int): row index,
-        - orientation (int): orientation of the agent (LEFT = 0, DOWN = 1, RIGHT = 2, UP = 3),
-        - fov_cells (list): list of integer tuples indicating the coordinates of cells currently observed by the agent,
-    - agent_pos (int): agent position considering the flattened grid (e.g. cell `(2, 3)` corresponds to position `23`),
-    - total_covered_cells (int): how many cells have been covered by the agent so far,
-    - cells_remaining (int): how many cells are left to be visited in the current map layout,
-    - coverable_cells (int): how many cells can be covered in the current map layout,
-    - steps_remaining (int): steps remaining in the episode.
-    - new_cell_covered (bool): if a cell previously uncovered was covered on this step
-    - game_over (bool) : if the game was terminated because the player was seen by an enemy or not
+
+def reward_function_2(info: dict) -> float:
+    """
+    Predictive Danger Avoidance Reward
+    
+    This reward function uses the danger table to predict future danger and encourages the agent to:
+    1. Visit cells that will become dangerous in the future
+    2. Strongly rewards exploring new cells
+    3. Penalizes getting caught
+    4. Gives a completion bonus
+    """
+    enemies = info["enemies"]
+    agent_pos = info["agent_pos"]
+    total_covered_cells = info["total_covered_cells"]
+    cells_remaining = info["cells_remaining"]
+    coverable_cells = info["coverable_cells"]
+    new_cell_covered = info["new_cell_covered"]
+    game_over = info["game_over"]
+    
+    # Set up danger table if not already done
+    global danger_table_set
+    if not danger_table_set:
+        set_danger_table(determine_cell_danger_tables(enemies))
+    
+    reward = 0
+    
+    # Base step penalty
+    reward -= 2
+    
+    # Major reward for exploring new cells
+    if new_cell_covered:
+        reward += 100
+    
+    # Severe penalty for getting caught
+    if game_over:
+        reward -= 1000
+        reset_timestep()
+        danger_table_set = False
+        return reward
+    
+    # Completion bonus
+    if cells_remaining == 0:
+        reward += 2000
+    
+    # Predictive danger rewards - visit cells that will be dangerous soon
+    cur_timestep = get_timestep()
+    next_steps = [(cur_timestep + 1) % 4, (cur_timestep + 2) % 4, (cur_timestep + 3) % 4]
+    
+    # Convert agent_pos to x,y coordinates
+    agent_x = agent_pos % 10
+    agent_y = agent_pos // 10
+    
+    # Add reward for being in cells that will become dangerous soon
+    for index, step in enumerate(next_steps):
+        if danger_table[agent_x][agent_y][step] == 1:
+            # Higher reward for cells that will be dangerous sooner
+            reward += 10 * (3 - index)
+    
+    # Update timestep for tracking enemy rotation
+    incr_timestep()
+    
+    return reward
+
+
+def reward_function_3(info: dict) -> float:
+    """
+    Distance-Based Exploration Reward
+    
+    This reward function encourages:
+    1. Exploring new cells with diminishing returns as more are explored
+    2. Proximity to unexplored cells
+    3. Avoiding getting caught
+    4. Completion
     """
     enemies = info["enemies"]
     agent_pos = info["agent_pos"]
@@ -114,27 +193,60 @@ def reward(info: dict) -> float:
     steps_remaining = info["steps_remaining"]
     new_cell_covered = info["new_cell_covered"]
     game_over = info["game_over"]
-    global danger_table_set
-    if not danger_table_set:
-        set_danger_table(determine_cell_danger_tables(enemies))
-    # IMPORTANT: You may design a reward function that uses just some of these values. Experiment with different
-    # rewards and find out what works best for the algorithm you chose given the observation space you are using
+    
     reward = 0
-    reward += (100 - coverable_cells) if new_cell_covered else -coverable_cells
-    reward -= 1000 if game_over else 0
-
-    # Try modifying the reward to reward cells which are dangerous SOMETIMES, but not right now
-    # Logic here is that you want to traverse the harder cells while you can
-    # Reward cells that will be dangerous 3 steps from now the most
-    cur_timestep = get_timestep()
-    next_steps = [(cur_timestep + 1) % 4, (cur_timestep + 2) % 4, (cur_timestep + 3) % 4]
-    for index, i in enumerate(next_steps):
-        reward += danger_table[agent_pos % 10][agent_pos // 10][i] * 5 * (index + 1)
-    incr_timestep()
+    
+    # Small step penalty
+    reward -= 1
+    
+    # Reward for new cells with diminishing returns
+    # As more cells are covered, the reward per cell decreases
+    if new_cell_covered:
+        # Calculate what percentage of cells have been explored
+        exploration_progress = total_covered_cells / coverable_cells
+        # Higher reward for early exploration, lower for later cells
+        reward += max(20, 150 * (1 - exploration_progress))
+    
+    # Harsh penalty for getting caught
     if game_over:
-        reset_timestep()
-        danger_table_set = False
+        reward -= 500
+        return reward
+    
+    # Large completion bonus with time efficiency factor
+    if cells_remaining == 0:
+        time_efficiency_bonus = steps_remaining / 500.0  # Higher bonus for faster completion
+        reward += 1000 + (1000 * time_efficiency_bonus)
+    
+    # Convert agent_pos to x,y coordinates
+    agent_x = agent_pos % 10
+    agent_y = agent_pos // 10
+    
+    # Reward proximity to unexplored cells (if there are any left)
+    if cells_remaining > 0:
+        # This would require access to the grid state to calculate
+        # Since we don't have direct access, we'll use a proxy reward based on cells_remaining
+        exploration_urgency = cells_remaining / coverable_cells
+        reward += 5 * exploration_urgency
+    
     return reward
+
+
+def reward(info: dict) -> float:
+    """
+    Main reward function that calls the active reward function based on ACTIVE_REWARD_FUNCTION.
+    """
+    global ACTIVE_REWARD_FUNCTION
+    
+    if ACTIVE_REWARD_FUNCTION == 1:
+        return reward_function_1(info)
+    elif ACTIVE_REWARD_FUNCTION == 2:
+        return reward_function_2(info)
+    elif ACTIVE_REWARD_FUNCTION == 3:
+        return reward_function_3(info)
+    else:
+        # Default to reward function 1 if invalid selection
+        return reward_function_1(info)
+
 
 timestep = 0
 
@@ -145,16 +257,25 @@ def get_timestep():
 def incr_timestep():
     global timestep
     timestep += 1
-    print("Timestep incremented")
 
 def reset_timestep():
     global timestep
     timestep = 0
-    print("Timestep reset")
 
 def set_danger_table(new_table):
     global danger_table
     danger_table = new_table
     global danger_table_set
     danger_table_set = True
-    print(danger_table)
+
+def set_active_reward_function(function_number):
+    """
+    Set which reward function to use (1, 2, or 3)
+    """
+    global ACTIVE_REWARD_FUNCTION
+    if function_number in [1, 2, 3]:
+        ACTIVE_REWARD_FUNCTION = function_number
+        print(f"Using reward function {function_number}")
+    else:
+        print(f"Invalid reward function number: {function_number}. Using default (1)")
+        ACTIVE_REWARD_FUNCTION = 1

@@ -26,6 +26,38 @@ COLOR_IDS = {
     6: LIGHT_RED,  # explored cell being observed by an enemy
 }
 
+# Store danger table here within custom.py
+danger_table = [[[0 for _ in range(4)] for _ in range(10)] for _ in range(10)]
+danger_table_set = False
+# New shit
+def determine_cell_danger_tables(enemies):
+    # Take in location of enemies in particular
+    danger_tables = [[[0 for _ in range(4)] for _ in range(10)] for _ in range(10)]
+    for e in enemies:
+        orientation = e.orientation
+        # Try all 4 orientations counter clockwise
+        for i in range(4):
+            match orientation:
+                case 0:
+                    # Assume enemies can see 4 in any direction
+                    for j in range(1, 5):
+                        if e.x - j < 0: break
+                        danger_tables[e.x - j][e.y][i] = 1
+                case 1:
+                    for j in range(1, 5):
+                        if e.y + j > 9: break
+                        danger_tables[e.x][e.y + j][i] = 1
+                case 2:
+                    for j in range(1, 5):
+                        if e.x + j > 9: break
+                        danger_tables[e.x + j][e.y][i] = 1
+                case 3:
+                    for j in range(1, 5):
+                        if e.y - j < 0: break
+                        danger_tables[e.x][e.y - j][i] = 1
+            orientation = (orientation + 1) % 4
+    return danger_tables
+
 def observation_space(env: gym.Env) -> gym.spaces.Space:
     """
     Observation space from Gymnasium (https://gymnasium.farama.org/api/spaces/)
@@ -46,6 +78,8 @@ def observation(grid: np.ndarray):
     # If the observation returned is not the same shape as the observation_space, an error will occur!
     # Make sure to make changes to both functions accordingly.
 
+    # If danger table has not been added, do so
+    
     cell_values = np.ndarray(shape=(10, 10), dtype=np.uint8)
     for x in range(grid.shape[0]):
         for y in range(grid.shape[1]):
@@ -80,10 +114,47 @@ def reward(info: dict) -> float:
     steps_remaining = info["steps_remaining"]
     new_cell_covered = info["new_cell_covered"]
     game_over = info["game_over"]
-
+    global danger_table_set
+    if not danger_table_set:
+        set_danger_table(determine_cell_danger_tables(enemies))
     # IMPORTANT: You may design a reward function that uses just some of these values. Experiment with different
     # rewards and find out what works best for the algorithm you chose given the observation space you are using
     reward = 0
-    reward += 10 if new_cell_covered else -0.1
+    reward += (100 - coverable_cells) if new_cell_covered else -coverable_cells
     reward -= 1000 if game_over else 0
+
+    # Try modifying the reward to reward cells which are dangerous SOMETIMES, but not right now
+    # Logic here is that you want to traverse the harder cells while you can
+    # Reward cells that will be dangerous 3 steps from now the most
+    cur_timestep = get_timestep()
+    next_steps = [(cur_timestep + 1) % 4, (cur_timestep + 2) % 4, (cur_timestep + 3) % 4]
+    for index, i in enumerate(next_steps):
+        reward += danger_table[agent_pos % 10][agent_pos // 10][i] * 5 * (index + 1)
+    incr_timestep()
+    if game_over:
+        reset_timestep()
+        danger_table_set = False
     return reward
+
+timestep = 0
+
+def get_timestep():
+    global timestep
+    return timestep
+
+def incr_timestep():
+    global timestep
+    timestep += 1
+    print("Timestep incremented")
+
+def reset_timestep():
+    global timestep
+    timestep = 0
+    print("Timestep reset")
+
+def set_danger_table(new_table):
+    global danger_table
+    danger_table = new_table
+    global danger_table_set
+    danger_table_set = True
+    print(danger_table)

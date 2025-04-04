@@ -220,6 +220,52 @@ def grid_search_hyperparameters():
     cv_split = [(np.array([0]), np.array([0]))]
     grid_search = GridSearchCV(estimator, param_grid, cv=cv_split)
     grid_search.fit(dummy_X)
+    # Print detailed results from all trials
+    print("\nDetailed Grid Search Results:")
+    print("=" * 50)
+    
+    # Create a formatted table of results
+    print(f"{'Parameters':<40} {'Mean Reward':<15} {'Rank':<10}")
+    print("-" * 65)
+    
+    # Sort results by mean test score (descending)
+    sorted_results = sorted(
+        zip(grid_search.cv_results_['params'], 
+            grid_search.cv_results_['mean_test_score'],
+            grid_search.cv_results_['rank_test_score']),
+        key=lambda x: x[1],
+        reverse=True
+    )
+    
+    # Print each configuration with its performance
+    for params, mean_score, rank in sorted_results:
+        param_str = f"lr={params['learning_rate']}, gamma={params['gamma']}"
+        print(f"{param_str:<40} {mean_score:<15.4f} {rank:<10}")
+    
+    # Print additional statistics if available
+    if 'std_test_score' in grid_search.cv_results_:
+        print("\nVariability in Results:")
+        print(f"{'Parameters':<40} {'Mean Reward':<15} {'Std Dev':<15}")
+        print("-" * 70)
+        
+        for i, params in enumerate(grid_search.cv_results_['params']):
+            param_str = f"lr={params['learning_rate']}, gamma={params['gamma']}"
+            mean = grid_search.cv_results_['mean_test_score'][i]
+            std = grid_search.cv_results_['std_test_score'][i]
+            print(f"{param_str:<40} {mean:<15.4f} {std:<15.4f}")
+
+    # Additional statistics
+    print("\nTiming Statistics:")
+    print(f"{'Parameters':<40} {'Mean Fit Time':<15} {'Mean Score Time':<15}")
+    print("-" * 70)
+    
+    for i, params in enumerate(grid_search.cv_results_['params']):
+        param_str = f"lr={params['learning_rate']}, gamma={params['gamma']}"
+        mean_fit_time = grid_search.cv_results_['mean_fit_time'][i]
+        mean_score_time = grid_search.cv_results_['mean_score_time'][i]
+        print(f"{param_str:<40} {mean_fit_time:<15.4f} {mean_score_time:<15.4f}")
+
+    print("=" * 50)
     print("Best parameters found:", grid_search.best_params_)
     print("Best average reward:", grid_search.best_score_)
 

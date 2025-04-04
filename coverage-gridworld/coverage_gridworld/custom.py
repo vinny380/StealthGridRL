@@ -14,7 +14,8 @@ danger_table_set = False
 # 1 = Basic exploration reward
 # 2 = Predictive danger avoidance reward
 # 3 = Distance-based exploration reward
-ACTIVE_REWARD_FUNCTION = 1
+# Default value used if no reward function is specified
+DEFAULT_REWARD_FUNCTION = 1
 
 # New shit
 def determine_cell_danger_tables(enemies):
@@ -231,17 +232,22 @@ def reward_function_3(info: dict) -> float:
     return reward
 
 
-def reward(info: dict) -> float:
+def reward(info: dict, active_reward_function: int = DEFAULT_REWARD_FUNCTION) -> float:
     """
-    Main reward function that calls the active reward function based on ACTIVE_REWARD_FUNCTION.
-    """
-    global ACTIVE_REWARD_FUNCTION
+    Main reward function that calls the specified reward function based on active_reward_function parameter.
     
-    if ACTIVE_REWARD_FUNCTION == 1:
+    Args:
+        info: The information dictionary from the environment
+        active_reward_function: Which reward function to use (1, 2, or 3)
+        
+    Returns:
+        float: The calculated reward
+    """
+    if active_reward_function == 1:
         return reward_function_1(info)
-    elif ACTIVE_REWARD_FUNCTION == 2:
+    elif active_reward_function == 2:
         return reward_function_2(info)
-    elif ACTIVE_REWARD_FUNCTION == 3:
+    elif active_reward_function == 3:
         return reward_function_3(info)
     else:
         # Default to reward function 1 if invalid selection
@@ -270,12 +276,12 @@ def set_danger_table(new_table):
 
 def set_active_reward_function(function_number):
     """
-    Set which reward function to use (1, 2, or 3)
+    Set the default reward function to use (1, 2, or 3)
     """
-    global ACTIVE_REWARD_FUNCTION
+    global DEFAULT_REWARD_FUNCTION
     if function_number in [1, 2, 3]:
-        ACTIVE_REWARD_FUNCTION = function_number
-        print(f"Using reward function {function_number}")
+        DEFAULT_REWARD_FUNCTION = function_number
+        print(f"Using reward function {function_number} as default")
     else:
         print(f"Invalid reward function number: {function_number}. Using default (1)")
-        ACTIVE_REWARD_FUNCTION = 1
+        DEFAULT_REWARD_FUNCTION = 1

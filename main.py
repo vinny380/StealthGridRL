@@ -3,12 +3,14 @@ import random
 import sys
 import time
 import gymnasium as gym
+import numpy as np
 
 from stable_baselines3 import DQN
 
-# Add coverage-gridworld to path
-sys.path.append("D:\\Documents\\CISC474_Project\\StealthGridRL\\coverage-gridworld")
-print(sys.path)
+# Add the 'coverage-gridworld' directory (the parent of the package folder) to sys.path
+module_path = os.path.join(os.path.dirname(__file__), 'coverage-gridworld')
+if module_path not in sys.path:
+    sys.path.insert(0, module_path)
 
 import coverage_gridworld  # must be imported, even though it's not directly referenced
 from coverage_gridworld import custom
@@ -146,21 +148,97 @@ num_episodes = 25
 def get_cell_danger_table():
     return danger_table
 
-for i in range(num_episodes):
-    env.reset()
-    # obs = env.get_state()
-    done = False
-    # Do nothing for one step, just to get danger table values
-    obs, reward, done, truncated, info = env.step(4)
-    danger_table = determine_cell_danger_tables(env, info["enemies"])
-    custom.set_danger_table(danger_table)
-    time.sleep(1)
-    while done is False:
-        custom.incr_timestep()
-        action = rl_player()
-        obs, reward, done, truncated, info = env.step(action)
-        # Sleep may be used to allow each step to be visualized. Value can be changed
-        #time.sleep(0.2)
-    if done:
-        time.sleep(2)
-env.close()
+
+
+# Import scikit-learn components
+from sklearn.base import BaseEstimator
+from sklearn.model_selection import GridSearchCV
+
+class DQNEstimator(BaseEstimator):
+    """
+    A scikit-learn style wrapper for the Stable-Baselines3 DQN agent.
+    This wrapper lets you use GridSearchCV for hyperparameter tuning.
+    """
+    def __init__(self, policy="MlpPolicy", learning_rate=0.001, gamma=0.99,
+                 total_timesteps=1000, eval_episodes=3):
+        self.policy = policy
+        self.learning_rate = learning_rate
+        self.gamma = gamma
+        self.total_timesteps = total_timesteps
+        self.eval_episodes = eval_episodes
+
+    def fit(self, X, y=None):
+        # Create a new environment for training without rendering.
+        self.env = gym.make("safe", render_mode="rgb_array", predefined_map_list=None, activate_game_status=False)
+        # Initialize the DQN model with the given hyperparameters.
+        self.model = DQN(self.policy, self.env,
+                         learning_rate=self.learning_rate,
+                         gamma=self.gamma, verbose=0)
+        # Train the model.
+        self.model.learn(total_timesteps=self.total_timesteps)
+        # Save the model with a filename that encodes the hyperparameters.
+        filename = f"dqn_{self.policy}_lr{self.learning_rate}_gamma{self.gamma}_timesteps{self.total_timesteps}.zip"
+        self.model.save(filename)
+        print(f"Model saved as {filename}")
+        return self
+
+    def predict(self, X):
+        # For compatibility: given an observation X, predict the action.
+        # Here, X is assumed to be a valid observation.
+        action, _ = self.model.predict(X, deterministic=True)
+        return action
+
+    def score(self, X, y=None):
+        # Evaluate the model by running a few episodes and computing the average reward.
+        total_rewards = []
+        for _ in range(self.eval_episodes):
+            obs, _ = self.env.reset()
+            done = False
+            episode_reward = 0
+            while not done:
+                action, _ = self.model.predict(obs, deterministic=True)
+                obs, reward, done, truncated, info = self.env.step(action)
+                episode_reward += reward
+            total_rewards.append(episode_reward)
+        avg_reward = np.mean(total_rewards)
+        return avg_reward
+
+def grid_search_hyperparameters():
+    """
+    Use scikit-learn's GridSearchCV to tune hyperparameters for the DQN agent.
+    """
+    # Define the hyperparameter grid.
+    param_grid = {
+        "learning_rate": [0.0001, 0.001, 0.01],
+        "gamma": [0.95, 0.99]
+    }
+    # For demonstration, we use a smaller number of timesteps.
+    estimator = DQNEstimator(total_timesteps=5000, eval_episodes=3)
+    # Dummy data (not used by the estimator, but required by GridSearchCV)
+    dummy_X = np.zeros((1, 1))
+    # Create a single-fold CV by providing a list with one split.
+    cv_split = [(np.array([0]), np.array([0]))]
+    grid_search = GridSearchCV(estimator, param_grid, cv=cv_split)
+    grid_search.fit(dummy_X)
+    print("Best parameters found:", grid_search.best_params_)
+    print("Best average reward:", grid_search.best_score_)
+
+
+if __name__ == "__main__":
+    # Allow choosing between running the simulation or grid search via command-line argument.
+    if len(sys.argv) > 1 and sys.argv[1] == "grid_search":
+        grid_search_hyperparameters()
+    else:
+        for i in range(num_episodes):
+            env.reset()
+            obs, reward, done, truncated, info = env.step(4)
+            danger_table = determine_cell_danger_tables(env, info["enemies"])
+            custom.set_danger_table(danger_table)
+            time.sleep(1)
+            while not done:
+                custom.incr_timestep()
+                action = rl_player()
+                obs, reward, done, truncated, info = env.step(action)
+            if done:
+                time.sleep(2)
+        env.close()

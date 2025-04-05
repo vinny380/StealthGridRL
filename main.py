@@ -920,6 +920,7 @@ class DQNEstimator(BaseEstimator):
         self.model = DQN(self.policy, self.env,
                          learning_rate=self.learning_rate,
                          gamma=self.gamma, verbose=0)
+        self.model.set_random_seed(42)
         # Train the model.
         self.model.learn(total_timesteps=self.total_timesteps)
         # Save the model with a filename that encodes the hyperparameters.
@@ -937,6 +938,8 @@ class DQNEstimator(BaseEstimator):
     def score(self, X, y=None):
         # Evaluate the model by running a few episodes and computing the average reward.
         total_rewards = []
+        self.model.save("temp.zip")
+        self.model = DQN.load("temp.zip", env=gym.make("standard", render_mode="human", predefined_map_list=maps, activate_game_status=False))
         for _ in range(self.eval_episodes):
             obs, _ = self.env.reset()
             done = False
@@ -959,7 +962,7 @@ def grid_search_hyperparameters():
         "gamma": [0.95, 0.99]
     }
     # For demonstration, we use a smaller number of timesteps.
-    estimator = DQNEstimator(total_timesteps=5000, eval_episodes=3)
+    estimator = DQNEstimator(total_timesteps=5000, eval_episodes=5)
     # Dummy data (not used by the estimator, but required by GridSearchCV)
     dummy_X = np.zeros((1, 1))
     # Create a single-fold CV by providing a list with one split.

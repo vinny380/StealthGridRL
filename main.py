@@ -148,11 +148,10 @@ num_episodes = 25
 def get_cell_danger_table():
     return danger_table
 
-
-
 # Import scikit-learn components
 from sklearn.base import BaseEstimator
 from sklearn.model_selection import GridSearchCV
+
 
 class DQNEstimator(BaseEstimator):
     """
@@ -169,7 +168,13 @@ class DQNEstimator(BaseEstimator):
 
     def fit(self, X, y=None):
         # Create a new environment for training without rendering.
-        self.env = gym.make("safe", render_mode="rgb_array", predefined_map_list=None, activate_game_status=False)
+
+        # NOTE: Comment out whichever one you aren't using.
+        # This one trains on random maps.
+        self.env = gym.make(id="standard", render_mode="rgb_array", redefined_map_list=None, activate_game_status=False)
+        # This one trains on the map set defined above.
+        # self.env = gym.make(id="standard", render_mode="rgb_array", predefined_map_list=maps, activate_game_status=False)
+
         # Initialize the DQN model with the given hyperparameters.
         self.model = DQN(self.policy, self.env,
                          learning_rate=self.learning_rate,

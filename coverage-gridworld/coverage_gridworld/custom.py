@@ -41,7 +41,7 @@ danger_table_set = False
 # 2 = Predictive danger avoidance reward
 # 3 = Distance-based exploration reward
 # Default value used if no reward function is specified
-DEFAULT_REWARD_FUNCTION = 3
+DEFAULT_REWARD_FUNCTION = 1
 
 # Active observation space (1, 2, 3, or 4)
 # 1 = Full grid observation (original)

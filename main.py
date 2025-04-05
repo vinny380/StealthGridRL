@@ -1017,7 +1017,8 @@ def grid_search_hyperparameters():
     print("=" * 50)
     print("Best parameters found:", grid_search.best_params_)
     print("Best average reward:", grid_search.best_score_)
-
+    model = DQN.load("dqn_MlpPolicy_lr{}_gamma{}_timesteps5000".format(grid_search.best_params_["learning_rate"], grid_search.best_params_["gamma"]))
+    model.save("best_model_obs{}_reward{}.zip".format(custom.DEFAULT_OBSERVATION_SPACE, custom.DEFAULT_REWARD_FUNCTION))
 
 def run_specific_model(obs_space=1, reward_func=1, map_type="safe"):
     """

@@ -41,7 +41,7 @@ danger_table_set = False
 # 2 = Predictive danger avoidance reward
 # 3 = Distance-based exploration reward
 # Default value used if no reward function is specified
-DEFAULT_REWARD_FUNCTION = 1
+DEFAULT_REWARD_FUNCTION = 3
 
 # Active observation space (1, 2, 3, or 4)
 # 1 = Full grid observation (original)
@@ -113,16 +113,11 @@ def observation_space_3(env: gym.Env) -> gym.spaces.Space:
     """
     Feature-engineered compact observation space.
     
-    Instead of raw grid data, this provides a set of calculated features that help
-    the agent understand the environment more efficiently:
-    
-    Features include:
-    - Agent position (x, y): 2 values (0-9 each)
-    - Nearest uncovered cell distance: 1 value (0-18)
-    - Danger level in 4 directions: 4 values (0-1 each, indicating if moving would be dangerous)
-    - Future danger levels: 4 values (if cell will be dangerous in next 1-4 steps)
-    - % of cells explored: 1 value (0-100)
-    - Direction to nearest uncovered cell: 4 values (one-hot encoding of direction)
+    Enhanced version with:
+    1. Better tracking of unexplored areas
+    2. Multiple nearest unexplored cells (not just one)
+    3. Improved directional guidance
+    4. Wall block information
     """
     # Create a Dict space with named features
     return gym.spaces.Dict({
@@ -139,13 +134,19 @@ def observation_space_3(env: gym.Env) -> gym.spaces.Space:
         'exploration_progress': gym.spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32),
         
         # Direction to nearest uncovered cell
-        'nearest_uncovered': gym.spaces.MultiDiscrete([19, 4]),  # (distance, direction)
+        'nearest_uncovered': gym.spaces.MultiDiscrete([20, 4]),  # (distance, direction)
+        
+        # Information about unexplored areas in each direction
+        'unexplored_direction': gym.spaces.MultiBinary(4),
+        
+        # Information about walls blocking paths
+        'wall_blocks': gym.spaces.MultiBinary(4)
     })
 
 
 def observation_space_4(env: gym.Env) -> gym.spaces.Space:
     """
-    Multi-layer observation space (from custom_2.py).
+    Multi-layer observation space.
     
     This observation space uses two separate layers:
     - Layer 1: Cell types (agent, covered, uncovered, untraversable)
@@ -263,6 +264,11 @@ def observation_2(grid: np.ndarray):
 def observation_3(grid: np.ndarray):
     """
     Feature-engineered compact observation function.
+    
+    Enhanced version with:
+    1. Better tracking of unexplored areas
+    2. Multiple nearest unexplored cells (not just one)
+    3. Improved directional guidance
     """
     # Find agent position
     agent_found = False
@@ -271,10 +277,6 @@ def observation_3(grid: np.ndarray):
     # Count of total cells and explored cells
     total_cells = 0
     explored_cells = 0
-    
-    # Nearest uncovered cell tracking
-    nearest_uncovered_dist = 19  # Max possible distance is 18 in a 10x10 grid
-    nearest_uncovered_dir = 0  # 0=left, 1=down, 2=right, 3=up
     
     # Create a map of the grid with cell types
     cell_types = np.zeros((10, 10), dtype=np.uint8)
@@ -300,18 +302,83 @@ def observation_3(grid: np.ndarray):
     # Calculate exploration progress
     exploration_progress = explored_cells / max(1, total_cells)
     
-    # Find nearest uncovered cell
+    # Track multiple nearby unexplored cells (collect the 3 nearest ones)
+    unexplored_cells = []
+    
     for x in range(10):
         for y in range(10):
             if cell_types[x, y] == 0 or cell_types[x, y] == 5:  # BLACK or RED (unexplored)
                 dist = abs(x - agent_x) + abs(y - agent_y)  # Manhattan distance
-                if dist < nearest_uncovered_dist:
-                    nearest_uncovered_dist = dist
-                    # Determine direction (use primary direction if diagonal)
+                
+                # Store this unexplored cell info
+                if dist < 20:  # Only consider cells within a reasonable distance
+                    # Determine primary direction
                     if abs(x - agent_x) > abs(y - agent_y):
-                        nearest_uncovered_dir = 0 if x < agent_x else 2  # LEFT or RIGHT
+                        dir_x = -1 if x < agent_x else 1
+                        dir_y = 0
                     else:
-                        nearest_uncovered_dir = 3 if y < agent_y else 1  # UP or DOWN
+                        dir_x = 0
+                        dir_y = -1 if y < agent_y else 1
+                    
+                    unexplored_cells.append((dist, x, y, dir_x, dir_y))
+    
+    # Sort by distance and take the 3 nearest cells
+    unexplored_cells.sort()
+    unexplored_cells = unexplored_cells[:3]
+    
+    # If we found any unexplored cells, use the nearest one
+    if unexplored_cells:
+        nearest_dist, nearest_x, nearest_y, dir_x, dir_y = unexplored_cells[0]
+        
+        # Get primary direction as a single number (0=left, 1=down, 2=right, 3=up)
+        if dir_x < 0:
+            nearest_dir = 0  # LEFT
+        elif dir_y > 0:
+            nearest_dir = 1  # DOWN
+        elif dir_x > 0:
+            nearest_dir = 2  # RIGHT
+        else:
+            nearest_dir = 3  # UP
+    else:
+        # If no unexplored cells found, use defaults
+        nearest_dist = 0
+        nearest_dir = 0
+        
+    # Calculate directions to unexplored areas (scan in 4 directions)
+    unexplored_direction = [0, 0, 0, 0]  # LEFT, DOWN, RIGHT, UP
+    
+    # Check for unexplored cells in each direction
+    # LEFT direction
+    for x in range(agent_x - 1, -1, -1):
+        if cell_types[x, agent_y] == 2:  # Stop at walls
+            break
+        if cell_types[x, agent_y] == 0 or cell_types[x, agent_y] == 5:
+            unexplored_direction[0] = 1
+            break
+    
+    # DOWN direction
+    for y in range(agent_y + 1, 10):
+        if cell_types[agent_x, y] == 2:  # Stop at walls
+            break
+        if cell_types[agent_x, y] == 0 or cell_types[agent_x, y] == 5:
+            unexplored_direction[1] = 1
+            break
+    
+    # RIGHT direction
+    for x in range(agent_x + 1, 10):
+        if cell_types[x, agent_y] == 2:  # Stop at walls
+            break
+        if cell_types[x, agent_y] == 0 or cell_types[x, agent_y] == 5:
+            unexplored_direction[2] = 1
+            break
+    
+    # UP direction
+    for y in range(agent_y - 1, -1, -1):
+        if cell_types[agent_x, y] == 2:  # Stop at walls
+            break
+        if cell_types[agent_x, y] == 0 or cell_types[agent_x, y] == 5:
+            unexplored_direction[3] = 1
+            break
     
     # Check immediate danger in each direction
     danger = [0, 0, 0, 0]
@@ -336,13 +403,26 @@ def observation_3(grid: np.ndarray):
             future_timestep = (cur_timestep + i) % 4
             future_danger[i] = danger_table[agent_x][agent_y][future_timestep]
     
+    # Also check if paths in each direction are blocked by walls
+    wall_blocks = [0, 0, 0, 0]  # LEFT, DOWN, RIGHT, UP
+    if agent_x > 0 and cell_types[agent_x-1, agent_y] == 2:
+        wall_blocks[0] = 1
+    if agent_y < 9 and cell_types[agent_x, agent_y+1] == 2:
+        wall_blocks[1] = 1
+    if agent_x < 9 and cell_types[agent_x+1, agent_y] == 2:
+        wall_blocks[2] = 1
+    if agent_y > 0 and cell_types[agent_x, agent_y-1] == 2:
+        wall_blocks[3] = 1
+    
     # Build and return the feature dictionary
     return {
         'agent_position': np.array([agent_x, agent_y]),
         'danger': np.array(danger),
         'future_danger': np.array(future_danger),
         'exploration_progress': np.array([exploration_progress], dtype=np.float32),
-        'nearest_uncovered': np.array([nearest_uncovered_dist, nearest_uncovered_dir])
+        'nearest_uncovered': np.array([nearest_dist, nearest_dir]),
+        'unexplored_direction': np.array(unexplored_direction),
+        'wall_blocks': np.array(wall_blocks)
     }
 
 
@@ -462,12 +542,16 @@ def reward_function_2(info: dict) -> float:
     2. Strongly rewards exploring new cells
     3. Penalizes getting caught
     4. Gives a completion bonus
+    5. Encourages finding unexplored regions
+    6. Prevents the agent from getting stuck in one area
+    7. Adds special handling for known problem areas (10,3)
     """
     enemies = info["enemies"]
     agent_pos = info["agent_pos"]
     total_covered_cells = info["total_covered_cells"]
     cells_remaining = info["cells_remaining"]
     coverable_cells = info["coverable_cells"]
+    steps_remaining = info["steps_remaining"]  # Use this to encourage efficiency
     new_cell_covered = info["new_cell_covered"]
     game_over = info["game_over"]
     
@@ -478,12 +562,20 @@ def reward_function_2(info: dict) -> float:
     
     reward = 0
     
-    # Base step penalty
-    reward -= 2
+    # Base step penalty, scaled to encourage efficient exploration
+    # Higher penalty per step when there are fewer cells remaining to explore
+    exploration_progress = total_covered_cells / coverable_cells
+    if exploration_progress > 0.5:
+        # Increase penalty as exploration progresses to discourage lingering
+        reward -= 5  # Increased from 3 to make the agent move more urgently
+    else:
+        reward -= 2  # Increased from 1 to make the agent move more purposefully
     
-    # Major reward for exploring new cells
+    # Major reward for exploring new cells - scale higher as cells get harder to find
     if new_cell_covered:
-        reward += 100
+        # Exponentially increase reward as exploration progresses
+        # This encourages finding those last few difficult cells
+        reward += 150 * (1 + 3 * exploration_progress**2)  # Increased multiplier from 2 to 3
     
     # Severe penalty for getting caught
     if game_over:
@@ -492,23 +584,85 @@ def reward_function_2(info: dict) -> float:
         danger_table_set = False
         return reward
     
-    # Completion bonus
+    # Completion bonus with time efficiency factor
     if cells_remaining == 0:
-        reward += 2000
-    
-    # Predictive danger rewards - visit cells that will be dangerous soon
-    cur_timestep = get_timestep()
-    next_steps = [(cur_timestep + 1) % 4, (cur_timestep + 2) % 4, (cur_timestep + 3) % 4]
+        time_efficiency_bonus = steps_remaining / 500.0  # Higher bonus for faster completion
+        reward += 3000 + (1500 * time_efficiency_bonus)  # Increased from 2000/1000 to 3000/1500
+        return reward
     
     # Convert agent_pos to x,y coordinates
     agent_x = agent_pos % 10
     agent_y = agent_pos // 10
     
+    # Predictive danger rewards - visit cells that will be dangerous soon
+    cur_timestep = get_timestep()
+    next_steps = [(cur_timestep + 1) % 4, (cur_timestep + 2) % 4, (cur_timestep + 3) % 4]
+    
     # Add reward for being in cells that will become dangerous soon
+    danger_reward = 0
     for index, step in enumerate(next_steps):
         if danger_table[agent_x][agent_y][step] == 1:
             # Higher reward for cells that will be dangerous sooner
-            reward += 10 * (3 - index)
+            danger_reward += 15 * (3 - index)  # Increased from 10 to 15
+    reward += danger_reward
+    
+    # Add an exploration incentive to encourage visiting new areas
+    # This encourages the agent to move toward areas with many unexplored cells
+    if cells_remaining > 0:
+        # Higher reward when more cells still need to be explored
+        exploration_urgency = cells_remaining / coverable_cells
+        reward += 30 * exploration_urgency  # Increased from 20 to 30
+    
+    # Track positions and provide strong penalties for revisiting the same areas
+    global last_positions
+    if 'last_positions' not in globals():
+        # Initialize if not already done
+        last_positions = []
+    
+    # Add current position to history
+    last_positions.append((agent_x, agent_y))
+    # Keep only the last 30 positions (increased from 20)
+    if len(last_positions) > 30:
+        last_positions.pop(0)
+    
+    # Check for repeated positions with a stronger penalty
+    position_counts = {}
+    for pos in last_positions:
+        if pos in position_counts:
+            position_counts[pos] += 1
+        else:
+            position_counts[pos] = 1
+    
+    # Much stronger penalties for repeating positions
+    max_count = max(position_counts.values()) if position_counts else 0
+    if max_count > 3:  # Reduced threshold from 5 to 3
+        reward -= (max_count - 3) * 15  # Increased penalty from 5 to 15
+    
+    # Special handling for known problem area (10,3)
+    # The 10,3 position is out of bounds (grid is 0-9), but we'll check for position (9,3)
+    if agent_x == 9 and agent_y == 3:
+        # Apply a strong penalty when the agent is at this problem spot
+        reward -= 50
+        
+        # Count how many times the agent has been at this position recently
+        stuck_count = sum(1 for pos in last_positions[-10:] if pos == (9, 3))
+        if stuck_count > 2:
+            # Apply an escalating penalty if the agent keeps coming back here
+            reward -= stuck_count * 25
+    
+    # Add a momentum factor to discourage back-and-forth movement
+    if len(last_positions) >= 4:
+        # Check if agent is just moving back and forth between two positions
+        last_four = last_positions[-4:]
+        if (last_four[0] == last_four[2]) and (last_four[1] == last_four[3]):
+            # Penalize this oscillating behavior
+            reward -= 40
+    
+    # Track unique positions visited in the last N steps to reward diverse exploration
+    recent_positions = last_positions[-15:]
+    unique_positions = len(set(recent_positions))
+    # Reward for visiting more unique positions recently
+    reward += unique_positions * 2
     
     # Update timestep for tracking enemy rotation
     incr_timestep()
